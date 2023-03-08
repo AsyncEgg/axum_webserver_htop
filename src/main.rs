@@ -1,4 +1,4 @@
-use axum::{routing::get, Router, Server, extract::State, Json, response::IntoResponse};
+use axum::{routing::get, Router, Server, extract::State, Json, response::{IntoResponse, Html}};
 use sysinfo::{CpuExt, System, SystemExt};
 use std::sync::{Arc, Mutex};
 
@@ -23,8 +23,10 @@ struct AppState {
     sys: Arc<Mutex<System>>,
 }
 
-async fn root_get() -> &'static str {
-    "Ello"
+#[axum::debug_handler]
+async fn root_get() -> impl IntoResponse {
+    let markup = tokio::fs::read_to_string("src/index.html").await.unwrap();
+    Html(markup) //Html(include_str!("index.html")) great for prod
 }
 
 #[axum::debug_handler]
