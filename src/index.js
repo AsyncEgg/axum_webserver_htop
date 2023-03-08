@@ -1,0 +1,1 @@
+alert("Egg's first javascript file!")

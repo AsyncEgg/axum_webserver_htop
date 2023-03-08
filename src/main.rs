@@ -1,12 +1,13 @@
-use axum::{routing::get, Router, Server, extract::State, Json, response::{IntoResponse, Html}};
+use axum::{routing::get, Router, Server, extract::State, Json, response::{IntoResponse, Html, Response}};
 use sysinfo::{CpuExt, System, SystemExt};
 use std::sync::{Arc, Mutex};
 
 #[tokio::main]
 async fn main() {
     let app = Router::new()
-        .route("/", get(root_get))
-        .route("/api/cpus", get(cpus_get))
+    .route("/", get(root_get))
+    .route("/index.js", get(indexjs_get))
+    .route("/api/cpus", get(cpus_get))
         .with_state(AppState {
             sys: Arc::new(Mutex::new(System::new()) )
         });
@@ -27,6 +28,14 @@ struct AppState {
 async fn root_get() -> impl IntoResponse {
     let markup = tokio::fs::read_to_string("src/index.html").await.unwrap();
     Html(markup) //Html(include_str!("index.html")) great for prod
+}
+#[axum::debug_handler]
+async fn indexjs_get() -> impl IntoResponse {
+    let markup = tokio::fs::read_to_string("src/index.js").await.unwrap();
+    Response::builder()
+        .header("content-type", "application/javascript;charset=utf-8")
+        .body(markup)
+        .unwrap()
 }
 
 #[axum::debug_handler]
