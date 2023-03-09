@@ -4,25 +4,42 @@ use std::sync::{Arc, Mutex};
 
 #[tokio::main]
 async fn main() {
-    let app = Router::new()
+    let app_state  = AppState::default();
+    
+    let router = Router::new()
     .route("/", get(root_get))
     .route("/index.mjs", get(indexmjs_get))
     .route("/index.css", get(indexcss_get))
     .route("/api/cpus", get(cpus_get))
-        .with_state(AppState {
-            sys: Arc::new(Mutex::new(System::new()) )
-        });
+        .with_state(app_state.clone());
 
-    let server = Server::bind(&"127.0.0.1:7474".parse().unwrap()).serve(app.into_make_service());
+
+    //Update CPU usage in the background
+    tokio::task::spawn_blocking(move || {
+        let mut sys = System::new();
+        loop {
+            sys.refresh_cpu();
+            let v: Vec<_> = sys.cpus().iter().map(|cpu| cpu.cpu_usage()).collect();
+            
+            {
+                let mut cpus = app_state.cpus.lock().unwrap();
+                *cpus = v;
+            }
+            
+            std::thread::sleep(System::MINIMUM_CPU_UPDATE_INTERVAL);
+        }
+    });
+
+    let server = Server::bind(&"127.0.0.1:7474".parse().unwrap()).serve(router.into_make_service());
     
     let addr = server.local_addr();
     println!("Listening On {addr}");System::new();
 
     server.await.unwrap();
 }
-#[derive(Clone)]
+#[derive(Default, Clone)]
 struct AppState {
-    sys: Arc<Mutex<System>>,
+    cpus: Arc<Mutex<Vec<f32>>>//32:50
 }
 
 #[axum::debug_handler]
@@ -49,11 +66,7 @@ async fn indexcss_get() -> impl IntoResponse {
 
 #[axum::debug_handler]
 async fn cpus_get(State(state): State<AppState>) -> impl IntoResponse {
-    let mut sys = state.sys.lock().unwrap();
-    sys.refresh_cpu();
-
-    let v: Vec<_> = sys.cpus().iter().map(|cpu| cpu.cpu_usage()).collect();
-
+    let v = state.cpus.lock().unwrap().clone();    
     Json(v)
 }
 //http://127.0.0.1:7474/api/cpus
